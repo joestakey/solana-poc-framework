@@ -62,6 +62,7 @@ pub use solana_transaction_status;
 pub use spl_associated_token_account;
 pub use spl_memo;
 pub use spl_token;
+pub use spl_token_2022;
 
 mod keys;
 mod programs;
@@ -285,6 +286,83 @@ pub trait Environment {
                 ),
                 spl_token::instruction::initialize_account(
                     &spl_token::ID,
+                    &account.pubkey(),
+                    &mint,
+                    &account.pubkey(),
+                )
+                .unwrap(),
+            ],
+            &[account],
+        )
+        .assert_success();
+    }
+
+    fn create_token_mint_2022(
+        &mut self,
+        mint: &Keypair,
+        authority: Pubkey,
+        freeze_authority: Option<Pubkey>,
+        decimals: u8,
+    ) {
+        self.execute_as_transaction(
+            &[
+                system_instruction::create_account(
+                    &self.payer().pubkey(),
+                    &mint.pubkey(),
+                    self.get_rent_excemption(spl_token_2022::state::Mint::LEN),
+                    spl_token_2022::state::Mint::LEN as u64,
+                    &spl_token_2022::ID,
+                ),
+                spl_token_2022::instruction::initialize_mint(
+                    &spl_token_2022::ID,
+                    &mint.pubkey(),
+                    &authority,
+                    freeze_authority.as_ref(),
+                    decimals,
+                )
+                .unwrap(),
+            ],
+            &[mint],
+        )
+        .assert_success();
+    }
+
+    /// Like `mint_tokens`, but for SPL-Token-2022.
+    fn mint_tokens_2022(
+        &mut self,
+        mint: Pubkey,
+        authority: &Keypair,
+        account: Pubkey,
+        amount: u64,
+    ) {
+        self.execute_as_transaction(
+            &[spl_token_2022::instruction::mint_to(
+                &spl_token_2022::ID,
+                &mint,
+                &account,
+                &authority.pubkey(),
+                &[],
+                amount,
+            )
+            .unwrap()],
+            &[authority],
+        )
+        .assert_success();
+    }
+
+    /// Like `create_token_account`, but for SPL-Token-2022.
+    fn create_token_account_2022(&mut self, account: &Keypair, mint: Pubkey) {
+        self.execute_as_transaction(
+            &[
+                system_instruction::create_account(
+                    &self.payer().pubkey(),
+                    &account.pubkey(),
+                    self.get_rent_excemption(spl_token_2022::state::Account::LEN),
+                    spl_token_2022::state::Account::LEN as u64,
+                    &spl_token_2022::ID,
+                ),
+                spl_token_2022::instruction::initialize_account(
+                    &spl_token_2022::ID,
                     &account.pubkey(),
                     &mint,
                     &account.pubkey(),
@@ -757,6 +835,50 @@ impl LocalEnvironmentBuilder {
                 amount,
                 delegate: COption::None,
                 state: spl_token::state::AccountState::Initialized,
+                is_native: COption::None,
+                delegated_amount: 0,
+                close_authority: COption::None,
+            },
+        )
+    }
+
+    pub fn add_token_mint_2022(
+        &mut self,
+        pubkey: Pubkey,
+        mint_authority: Option<Pubkey>,
+        supply: u64,
+        decimals: u8,
+        freeze_authority: Option<Pubkey>,
+    ) -> &mut Self {
+        self.add_account_with_packable(
+            pubkey,
+            spl_token_2022::ID,
+            spl_token_2022::state::Mint {
+                mint_authority: COption::from(mint_authority),
+                supply,
+                decimals,
+                is_initialized: true,
+                freeze_authority: COption::from(freeze_authority),
+            },
+        )
+    }
+
+    pub fn add_account_with_tokens_2022(
+        &mut self,
+        pubkey: Pubkey,
+        mint: Pubkey,
+        owner: Pubkey,
+        amount: u64,
+    ) -> &mut Self {
+        self.add_account_with_packable(
+            pubkey,
+            spl_token_2022::ID,
+            spl_token_2022::state::Account {
+                mint,
+                owner,
+                amount,
+                delegate: COption::None,
+                state: spl_token_2022::state::AccountState::Initialized,
                 is_native: COption::None,
                 delegated_amount: 0,
                 close_authority: COption::None,
