@@ -35,7 +35,7 @@ use solana_runtime::{
     runtime_config::RuntimeConfig,
 };
 use solana_sdk::{
-    account::{Account, AccountSharedData},
+    account::{Account, AccountSharedData, ReadableAccount},
     commitment_config::CommitmentConfig,
     feature_set,
     genesis_config::GenesisConfig,
@@ -51,6 +51,7 @@ use solana_transaction_status::{
     VersionedTransactionWithStatusMeta,
 };
 use spl_associated_token_account::{get_associated_token_address, get_associated_token_address_with_program_id};
+use spl_token_2022::extension::{BaseStateWithExtensions,ExtensionType};
 
 pub use bincode;
 pub use borsh;
@@ -941,21 +942,64 @@ impl LocalEnvironmentBuilder {
         mint: Pubkey,
         amount: u64,
     ) -> &mut Self {
-        self.add_account_with_packable(
+        let mut required_extensions: Vec<ExtensionType> = Vec::new();
+        if let Some(mint_acc) = self.config.accounts.get(&mint) {
+            let mint_bytes: Vec<u8> = mint_acc.data().to_vec();
+
+            // Immutable view on the mint + its TLV section
+            if let Ok(mint_state) = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_bytes) {
+                // For every mint-side extension, push the companion account-side one (if any)
+                if let Ok(exts) = mint_state.get_extension_types() {
+                    required_extensions = exts
+                        .iter()
+                        .filter_map(|ext| self.account_ext_for_mint_ext(ext))
+                        .collect();
+                }
+            }
+        }
+
+        // ── 2. compute the full account length (165 + extension area) ────────────
+        let space =
+        spl_token_2022::extension::ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&required_extensions).expect("len");
+        
+        // ── 3. build the raw buffer and pack the 165-byte header ─────────────────
+        let mut data = vec![0u8; space];
+        spl_token_2022::state::Account {
+            mint,
+            owner,
+            amount,
+            delegate: COption::None,
+            state: spl_token_2022::state::AccountState::Initialized,
+            is_native: COption::None,
+            delegated_amount: 0,
+            close_authority: COption::None,
+        }.pack_into_slice(&mut data[..spl_token_2022::state::Account::LEN]);
+
+        self.add_account_with_data(
             get_associated_token_address_with_program_id(&owner, &mint, &spl_token_2022::ID),
             spl_token_2022::ID,
-            spl_token_2022::state::Account {
-                mint,
-                owner,
-                amount,
-                delegate: COption::None,
-                state: spl_token_2022::state::AccountState::Initialized,
-                is_native: COption::None,
-                delegated_amount: 0,
-                close_authority: COption::None,
-            },
+            &data,
+            false,
+            
         )
     }
+    
+    /// Returns the companion *account-side* extension (if any) required for a given mint extension
+    fn account_ext_for_mint_ext(&mut self, ext: &ExtensionType) -> Option<ExtensionType> {
+        use ExtensionType::*;
+        match ext {
+            // 1-to-1 relationships that require an token account extension
+            TransferFeeConfig          => Some(TransferFeeAmount),
+            ConfidentialTransferMint   => Some(ConfidentialTransferAccount),
+            ConfidentialTransferFeeConfig => Some(ConfidentialTransferFeeAmount),
+            NonTransferable            => Some(NonTransferableAccount),
+            TransferHook               => Some(TransferHookAccount),
+            ImmutableOwner             => Some(ImmutableOwner),
+            // Ignore extensions that do not force a token account extension
+            _ => None,
+        }
+    }
+    
 
     /// Clone an account from a cluster using the given rpc client. Use [clone_upgradable_program_from_cluster] if you want to clone a upgradable program, as this requires multiple accounts.
     pub fn clone_account_from_cluster(&mut self, pubkey: Pubkey, client: &RpcClient) -> &mut Self {
