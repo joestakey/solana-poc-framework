@@ -50,7 +50,7 @@ use solana_transaction_status::{
     InnerInstructions, TransactionStatusMeta, TransactionWithStatusMeta, UiTransactionEncoding,
     VersionedTransactionWithStatusMeta,
 };
-use spl_associated_token_account::get_associated_token_address;
+use spl_associated_token_account::{get_associated_token_address, get_associated_token_address_with_program_id};
 
 pub use bincode;
 pub use borsh;
@@ -395,6 +395,30 @@ pub trait Environment {
         let acc = get_associated_token_address(&owner.pubkey(), &mint);
         if self.get_account(acc).is_none() {
             self.create_associated_token_account(owner, mint);
+        }
+        acc
+    }
+    /// Executes a transaction constructing the associated token account of the specified mint belonging to the owner. This will fail if the account already exists.
+    fn create_associated_token_account_2022(&mut self, owner: &Keypair, mint: Pubkey) -> Pubkey {
+        self.execute_as_transaction(
+            &[
+                spl_associated_token_account::instruction::create_associated_token_account(
+                    &self.payer().pubkey(),
+                    &owner.pubkey(),
+                    &mint,
+                    &spl_token_2022::ID,
+                ),
+            ],
+            &[],
+        );
+        get_associated_token_address_with_program_id(&owner.pubkey(), &mint, &spl_token_2022::ID)
+    }
+
+    /// Executes a transaction constructing the associated token account of the specified mint belonging to the owner.
+    fn get_or_create_associated_token_account_2022(&mut self, owner: &Keypair, mint: Pubkey) -> Pubkey {
+        let acc = get_associated_token_address_with_program_id(&owner.pubkey(), &mint, &spl_token_2022::ID);
+        if self.get_account(acc).is_none() {
+            self.create_associated_token_account_2022(owner, mint);
         }
         acc
     }
@@ -902,6 +926,30 @@ impl LocalEnvironmentBuilder {
                 amount,
                 delegate: COption::None,
                 state: spl_token::state::AccountState::Initialized,
+                is_native: COption::None,
+                delegated_amount: 0,
+                close_authority: COption::None,
+            },
+        )
+    }
+    
+    // Add the associated token-account into the environment.
+    // @dev this does not work for mints with required token extensions
+    pub fn add_associated_account_with_tokens_2022(
+        &mut self,
+        owner: Pubkey,
+        mint: Pubkey,
+        amount: u64,
+    ) -> &mut Self {
+        self.add_account_with_packable(
+            get_associated_token_address_with_program_id(&owner, &mint, &spl_token_2022::ID),
+            spl_token_2022::ID,
+            spl_token_2022::state::Account {
+                mint,
+                owner,
+                amount,
+                delegate: COption::None,
+                state: spl_token_2022::state::AccountState::Initialized,
                 is_native: COption::None,
                 delegated_amount: 0,
                 close_authority: COption::None,
