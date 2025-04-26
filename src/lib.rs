@@ -729,22 +729,6 @@ impl LocalEnvironmentBuilder {
             .remove(&feature_set::fix_recent_blockhashes::id());
 
         let mut builder = LocalEnvironmentBuilder { faucet, config };
-        builder.add_account_with_data(
-            spl_associated_token_account::ID,
-            bpf_loader::ID,
-            programs::SPL_ASSOCIATED_TOKEN,
-            true,
-        );
-        builder.add_account_with_data(
-            "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo"
-                .parse()
-                .unwrap(),
-            bpf_loader::ID,
-            programs::SPL_MEMO1,
-            true,
-        );
-        builder.add_account_with_data(spl_memo::ID, bpf_loader::ID, programs::SPL_MEMO3, true);
-        builder.add_account_with_data(spl_token::ID, bpf_loader::ID, programs::SPL_TOKEN, true);
         builder.add_account_with_lamports(rent::ID, sysvar::ID, 1);
         builder
     }
