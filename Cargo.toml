@@ -43,5 +43,5 @@ once_cell = "1.9.0"
 
 [patch.crates-io]
 time = { git = "https://github.com/time-rs/time.git", tag = "v0.3.35" }
-spl-memo = { git = "https://github.com/solana-labs/solana-program-library.git", tag = "spl-memo-v4.0.4" }
-spl-token = { git = "https://github.com/solana-labs/solana-program-library.git", tag = "spl-token-v4.0.3" }
+spl-memo = { git = "https://github.com/joestakey/solana-program-library.git", branch = "fix-spl-crates-4.0.0" }
+spl-token = { git = "https://github.com/joestakey/solana-program-library.git", branch = "fix-spl-crates-4.0.0" }
